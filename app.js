@@ -1,12 +1,33 @@
+// app.js — GitHub Pages friendly gallery
+// Auto-load by pattern (any ext among png/webp/jpeg/jpg), up to MAX_ITEMS per section,
+// skipping missing files, and stopping early after a streak of misses to avoid tons of requests.
+//
+// Expected filenames in /assets:
+//   NFT:     nft-1.webp (or .png/.jpeg/.jpg), nft-2..., ...
+//   Mobile:  mob-1.webp (or ...), mob-2..., ...
+//   Personal:per-1.webp (or ...), per-2..., ...
+//
+// Adding a new file like assets/mob-4.webp will automatically add it to Mobile section.
+
 const MAX_ITEMS = 50;
 const ASSETS_DIR = "assets/";
-const EXTENSIONS = ["png", "webp", "jpeg", "jpg"];
+const EXTENSIONS = ["webp", "jpg", "jpeg", "png"]; // try fastest/common first
+
+// Stop scanning if we see many missing numbers in a row (reduces requests a lot)
+const STOP_AFTER_MISSES = 12;
+
+// Small delay between checks (reduces bursty parallel/network load on Pages)
+const CHECK_DELAY_MS = 0;
 
 const SECTIONS = [
     { rootId: "gridNft", prefix: "nft-", titlePrefix: "NFT", defaultType: "Artwork" },
     { rootId: "gridMobile", prefix: "mob-", titlePrefix: "Mobile", defaultType: "Artwork" },
     { rootId: "gridPersonal", prefix: "per-", titlePrefix: "Personal", defaultType: "Artwork" },
 ];
+
+function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+}
 
 function escapeHtml(s) {
     return String(s)
@@ -40,46 +61,55 @@ function makePlaceholderSvg(title = "Artwork") {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-function findExistingImageUrl(baseName) {
-    const candidates = EXTENSIONS.map((ext) => `${ASSETS_DIR}${baseName}.${ext}`);
-
+// Try to load an image URL (true if it loads)
+function tryLoad(url) {
     return new Promise((resolve) => {
-        let i = 0;
-
-        const tryNext = () => {
-            if (i >= candidates.length) return resolve(null);
-
-            const url = candidates[i++];
-            const img = new Image();
-
-            img.onload = () => resolve(url);
-            img.onerror = () => tryNext();
-
-            img.src = `${url}?v=${Date.now()}`;
-        };
-
-        tryNext();
+        const img = new Image();
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = url;
     });
 }
 
+/**
+ * Find first existing url among extensions for baseName (e.g. "mob-4").
+ * We do NOT cache-bust here to let CDN/browser cache help on GitHub Pages.
+ */
+async function findExistingImageUrl(baseName) {
+    for (const ext of EXTENSIONS) {
+        const url = `${ASSETS_DIR}${baseName}.${ext}`;
+        // eslint-disable-next-line no-await-in-loop
+        const ok = await tryLoad(url);
+        if (ok) return url;
+
+        if (CHECK_DELAY_MS) {
+            // eslint-disable-next-line no-await-in-loop
+            await sleep(CHECK_DELAY_MS);
+        }
+    }
+    return null;
+}
+
 function itemHtml({ title, type, imgUrl }) {
-    const cleanUrl = imgUrl.split("?")[0];
+    const t = escapeHtml(title);
+    const m = escapeHtml(type);
 
     return `
     <button class="item" type="button"
-      data-title="${escapeHtml(title)}"
-      data-type="${escapeHtml(type)}"
-      data-img="${encodeURI(cleanUrl)}">
+      data-title="${t}"
+      data-type="${m}"
+      data-img="${encodeURI(imgUrl)}">
       <div class="item__media">
         <img class="item__img"
-          src="${cleanUrl}"
-          alt="${escapeHtml(title)}"
+          src="${imgUrl}"
+          alt="${t}"
           loading="lazy"
+          decoding="async"
           data-fallback="${makePlaceholderSvg(title)}">
       </div>
       <div class="item__body">
-        <div class="item__title">${escapeHtml(title)}</div>
-        <div class="item__meta">${escapeHtml(type)}</div>
+        <div class="item__title">${t}</div>
+        <div class="item__meta">${m}</div>
       </div>
     </button>
   `;
@@ -89,14 +119,25 @@ async function buildSection(section) {
     const root = document.getElementById(section.rootId);
     if (!root) return;
 
+    // Optional: tiny loading hint (empty keeps layout clean)
+    root.innerHTML = "";
+
     const found = [];
+    let missesInRow = 0;
 
     for (let idx = 1; idx <= MAX_ITEMS; idx++) {
         const baseName = `${section.prefix}${idx}`;
+
         // eslint-disable-next-line no-await-in-loop
         const url = await findExistingImageUrl(baseName);
-        if (!url) continue;
 
+        if (!url) {
+            missesInRow++;
+            if (missesInRow >= STOP_AFTER_MISSES) break; // stop early
+            continue;
+        }
+
+        missesInRow = 0;
         found.push({
             title: `${section.titlePrefix} #${idx}`,
             type: section.defaultType,
@@ -107,6 +148,7 @@ async function buildSection(section) {
     root.innerHTML = found.map(itemHtml).join("");
 }
 
+// Fallback if an <img> fails later (e.g. file deleted)
 document.addEventListener(
     "error",
     (e) => {
@@ -114,16 +156,16 @@ document.addEventListener(
         if (!(img instanceof HTMLImageElement)) return;
         if (!img.classList.contains("item__img")) return;
 
-        const fallback = img.getAttribute("data-fallback");
-        if (!fallback) return;
+        const fb = img.getAttribute("data-fallback");
+        if (!fb) return;
 
         img.onerror = null;
-        img.src = fallback;
+        img.src = fb;
     },
     true
 );
 
-// Modal
+// ---------- Modal ----------
 const modal = document.getElementById("modal");
 const modalBackdrop = document.getElementById("modalBackdrop");
 const modalClose = document.getElementById("modalClose");
@@ -132,15 +174,17 @@ const modalMeta = document.getElementById("modalMeta");
 const modalImg = document.getElementById("modalImg");
 
 function openModal({ title, type, img }) {
-    modalTitle.textContent = title;
-    modalMeta.textContent = type;
+    if (!modal) return;
 
-    modalImg.src = img;
-    modalImg.alt = title;
+    modalTitle.textContent = title || "Artwork";
+    modalMeta.textContent = type || "";
+
+    modalImg.src = img || "";
+    modalImg.alt = title || "Artwork";
 
     modalImg.onerror = () => {
         modalImg.onerror = null;
-        modalImg.src = makePlaceholderSvg(title);
+        modalImg.src = makePlaceholderSvg(title || "Artwork");
     };
 
     modal.classList.add("is-open");
@@ -149,6 +193,8 @@ function openModal({ title, type, img }) {
 }
 
 function closeModal() {
+    if (!modal) return;
+
     modal.classList.remove("is-open");
     modal.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
@@ -170,31 +216,33 @@ document.addEventListener("click", (e) => {
     });
 });
 
-modalBackdrop.addEventListener("click", closeModal);
-modalClose.addEventListener("click", closeModal);
+if (modalBackdrop) modalBackdrop.addEventListener("click", closeModal);
+if (modalClose) modalClose.addEventListener("click", closeModal);
 document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeModal();
 });
 
-// Mobile menu
+// ---------- Mobile menu ----------
 const burgerBtn = document.getElementById("burgerBtn");
 const mobileMenu = document.getElementById("mobileMenu");
 
-burgerBtn.addEventListener("click", () => {
-    const isOpen = !mobileMenu.hasAttribute("hidden");
-    if (isOpen) mobileMenu.setAttribute("hidden", "");
-    else mobileMenu.removeAttribute("hidden");
-});
+if (burgerBtn && mobileMenu) {
+    burgerBtn.addEventListener("click", () => {
+        const isOpen = !mobileMenu.hasAttribute("hidden");
+        if (isOpen) mobileMenu.setAttribute("hidden", "");
+        else mobileMenu.removeAttribute("hidden");
+    });
 
-mobileMenu.addEventListener("click", (e) => {
-    if (e.target.tagName === "A") mobileMenu.setAttribute("hidden", "");
-});
+    mobileMenu.addEventListener("click", (e) => {
+        if (e.target.tagName === "A") mobileMenu.setAttribute("hidden", "");
+    });
 
-window.addEventListener("resize", () => {
-    if (window.innerWidth > 640) mobileMenu.setAttribute("hidden", "");
-});
+    window.addEventListener("resize", () => {
+        if (window.innerWidth > 640) mobileMenu.setAttribute("hidden", "");
+    });
+}
 
-// Init
+// ---------- Init ----------
 (async function init() {
     for (const sec of SECTIONS) {
         // eslint-disable-next-line no-await-in-loop
