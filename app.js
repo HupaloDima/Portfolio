@@ -1,33 +1,21 @@
-// app.js — GitHub Pages friendly gallery
-// Auto-load by pattern (any ext among png/webp/jpeg/jpg), up to MAX_ITEMS per section,
-// skipping missing files, and stopping early after a streak of misses to avoid tons of requests.
-//
-// Expected filenames in /assets:
-//   NFT:     nft-1.webp (or .png/.jpeg/.jpg), nft-2..., ...
-//   Mobile:  mob-1.webp (or ...), mob-2..., ...
-//   Personal:per-1.webp (or ...), per-2..., ...
-//
-// Adding a new file like assets/mob-4.webp will automatically add it to Mobile section.
+// app.js — prioritized loading: first images in first category load ASAP
+// Patterns: nft-1.webp ... , mob-1.webp ..., per-1.webp ...
+// Missing files are skipped, scan stops after a streak of misses.
 
 const MAX_ITEMS = 50;
 const ASSETS_DIR = "assets/";
-const EXTENSIONS = ["webp", "jpg", "jpeg", "png"]; // try fastest/common first
+const EXTENSIONS = ["webp", "jpg", "jpeg", "png"];
 
-// Stop scanning if we see many missing numbers in a row (reduces requests a lot)
 const STOP_AFTER_MISSES = 12;
 
-// Small delay between checks (reduces bursty parallel/network load on Pages)
-const CHECK_DELAY_MS = 0;
+// How many first tiles (in the first section only) should be high priority
+const PRIORITY_FIRST_SECTION_COUNT = 6;
 
 const SECTIONS = [
     { rootId: "gridNft", prefix: "nft-", titlePrefix: "NFT", defaultType: "Artwork" },
     { rootId: "gridMobile", prefix: "mob-", titlePrefix: "Mobile", defaultType: "Artwork" },
     { rootId: "gridPersonal", prefix: "per-", titlePrefix: "Personal", defaultType: "Artwork" },
 ];
-
-function sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
-}
 
 function escapeHtml(s) {
     return String(s)
@@ -57,11 +45,9 @@ function makePlaceholderSvg(title = "Artwork") {
       </g>
     </svg>
   `.trim();
-
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-// Try to load an image URL (true if it loads)
 function tryLoad(url) {
     return new Promise((resolve) => {
         const img = new Image();
@@ -71,28 +57,23 @@ function tryLoad(url) {
     });
 }
 
-/**
- * Find first existing url among extensions for baseName (e.g. "mob-4").
- * We do NOT cache-bust here to let CDN/browser cache help on GitHub Pages.
- */
 async function findExistingImageUrl(baseName) {
     for (const ext of EXTENSIONS) {
         const url = `${ASSETS_DIR}${baseName}.${ext}`;
         // eslint-disable-next-line no-await-in-loop
         const ok = await tryLoad(url);
         if (ok) return url;
-
-        if (CHECK_DELAY_MS) {
-            // eslint-disable-next-line no-await-in-loop
-            await sleep(CHECK_DELAY_MS);
-        }
     }
     return null;
 }
 
-function itemHtml({ title, type, imgUrl }) {
+function itemHtml({ title, type, imgUrl, priority }) {
     const t = escapeHtml(title);
     const m = escapeHtml(type);
+
+    const loading = priority ? "eager" : "lazy";
+    const fetchpriority = priority ? "high" : "auto";
+    const decoding = "async";
 
     return `
     <button class="item" type="button"
@@ -103,8 +84,9 @@ function itemHtml({ title, type, imgUrl }) {
         <img class="item__img"
           src="${imgUrl}"
           alt="${t}"
-          loading="lazy"
-          decoding="async"
+          loading="${loading}"
+          decoding="${decoding}"
+          fetchpriority="${fetchpriority}"
           data-fallback="${makePlaceholderSvg(title)}">
       </div>
       <div class="item__body">
@@ -115,12 +97,9 @@ function itemHtml({ title, type, imgUrl }) {
   `;
 }
 
-async function buildSection(section) {
+async function buildSection(section, isFirstSection) {
     const root = document.getElementById(section.rootId);
     if (!root) return;
-
-    // Optional: tiny loading hint (empty keeps layout clean)
-    root.innerHTML = "";
 
     const found = [];
     let missesInRow = 0;
@@ -133,22 +112,27 @@ async function buildSection(section) {
 
         if (!url) {
             missesInRow++;
-            if (missesInRow >= STOP_AFTER_MISSES) break; // stop early
+            if (missesInRow >= STOP_AFTER_MISSES) break;
             continue;
         }
 
         missesInRow = 0;
+
+        const priority =
+            isFirstSection && found.length < PRIORITY_FIRST_SECTION_COUNT;
+
         found.push({
             title: `${section.titlePrefix} #${idx}`,
             type: section.defaultType,
             imgUrl: url,
+            priority,
         });
     }
 
     root.innerHTML = found.map(itemHtml).join("");
 }
 
-// Fallback if an <img> fails later (e.g. file deleted)
+// Fallback if image fails later
 document.addEventListener(
     "error",
     (e) => {
@@ -242,10 +226,14 @@ if (burgerBtn && mobileMenu) {
     });
 }
 
-// ---------- Init ----------
+// ---------- Init (NFT first, then others) ----------
 (async function init() {
-    for (const sec of SECTIONS) {
+    // Build first section (NFT) first with priority tiles
+    await buildSection(SECTIONS[0], true);
+
+    // Then build the rest
+    for (let i = 1; i < SECTIONS.length; i++) {
         // eslint-disable-next-line no-await-in-loop
-        await buildSection(sec);
+        await buildSection(SECTIONS[i], false);
     }
 })();
