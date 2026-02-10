@@ -1,0 +1,27 @@
+{
+  "nft": [
+    "nft-1.webp",
+    "nft-2.webp",
+    "nft-3.webp",
+    "nft-4.webp",
+    "nft-5.webp",
+    "nft-6.webp"
+  ],
+  "mobile": [
+    "mob-1.webp",
+    "mob-2.webp",
+    "mob-3.webp",
+    "mob-4.webp",
+    "mob-5.webp",
+    "mob-6.webp",
+    "mob-7.webp",
+    "mob-8.webp",
+    "mob-9.webp",
+    "mob-10.webp"
+  ],
+  "personal": [
+    "per-1.webp",
+    "per-2.webp",
+    "per-3.webp"
+  ]
+}

@@ -1,20 +1,28 @@
-// app.js — prioritized loading: first images in first category load ASAP
-// Patterns: nft-1.webp ... , mob-1.webp ..., per-1.webp ...
-// Missing files are skipped, scan stops after a streak of misses.
+// app.js — FAST gallery via gallery.json + thumb/full
+// Grid loads:  assets/thumb/<file>
+// Modal loads: assets/full/<file> only on click
+//
+// Required files:
+// - ./gallery.json (in project root)
+// - assets/thumb/*.webp
+// - assets/full/*.webp
+//
+// HTML must contain:
+// - #gridNft, #gridMobile, #gridPersonal
+// - modal elements: #modal, #modalBackdrop, #modalClose, #modalTitle, #modalMeta, #modalImg
+// - mobile menu: #burgerBtn, #mobileMenu (optional)
 
-const MAX_ITEMS = 50;
-const ASSETS_DIR = "assets/";
-const EXTENSIONS = ["webp", "jpg", "jpeg", "png"];
+const GALLERY_URL = "./gallery.json";
+const THUMB_DIR = "./assets/thumb/";
+const FULL_DIR = "./assets/full/";
 
-const STOP_AFTER_MISSES = 12;
-
-// How many first tiles (in the first section only) should be high priority
+// How many first NFT items should load ASAP (visible first)
 const PRIORITY_FIRST_SECTION_COUNT = 6;
 
 const SECTIONS = [
-    { rootId: "gridNft", prefix: "nft-", titlePrefix: "NFT", defaultType: "Artwork" },
-    { rootId: "gridMobile", prefix: "mob-", titlePrefix: "Mobile", defaultType: "Artwork" },
-    { rootId: "gridPersonal", prefix: "per-", titlePrefix: "Personal", defaultType: "Artwork" },
+    { key: "nft", rootId: "gridNft", titlePrefix: "NFT", defaultType: "Artwork" },
+    { key: "mobile", rootId: "gridMobile", titlePrefix: "Mobile", defaultType: "Artwork" },
+    { key: "personal", rootId: "gridPersonal", titlePrefix: "Personal", defaultType: "Artwork" },
 ];
 
 function escapeHtml(s) {
@@ -48,44 +56,25 @@ function makePlaceholderSvg(title = "Artwork") {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-function tryLoad(url) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve(true);
-        img.onerror = () => resolve(false);
-        img.src = url;
-    });
-}
-
-async function findExistingImageUrl(baseName) {
-    for (const ext of EXTENSIONS) {
-        const url = `${ASSETS_DIR}${baseName}.${ext}`;
-        // eslint-disable-next-line no-await-in-loop
-        const ok = await tryLoad(url);
-        if (ok) return url;
-    }
-    return null;
-}
-
-function itemHtml({ title, type, imgUrl, priority }) {
+function itemHtml({ title, type, thumbUrl, fullUrl, priority }) {
     const t = escapeHtml(title);
     const m = escapeHtml(type);
 
+    // priority: first few images in first section
     const loading = priority ? "eager" : "lazy";
     const fetchpriority = priority ? "high" : "auto";
-    const decoding = "async";
 
     return `
     <button class="item" type="button"
       data-title="${t}"
       data-type="${m}"
-      data-img="${encodeURI(imgUrl)}">
+      data-full="${encodeURI(fullUrl)}">
       <div class="item__media">
         <img class="item__img"
-          src="${imgUrl}"
+          src="${thumbUrl}"
           alt="${t}"
           loading="${loading}"
-          decoding="${decoding}"
+          decoding="async"
           fetchpriority="${fetchpriority}"
           data-fallback="${makePlaceholderSvg(title)}">
       </div>
@@ -97,42 +86,40 @@ function itemHtml({ title, type, imgUrl, priority }) {
   `;
 }
 
-async function buildSection(section, isFirstSection) {
-    const root = document.getElementById(section.rootId);
-    if (!root) return;
-
-    const found = [];
-    let missesInRow = 0;
-
-    for (let idx = 1; idx <= MAX_ITEMS; idx++) {
-        const baseName = `${section.prefix}${idx}`;
-
-        // eslint-disable-next-line no-await-in-loop
-        const url = await findExistingImageUrl(baseName);
-
-        if (!url) {
-            missesInRow++;
-            if (missesInRow >= STOP_AFTER_MISSES) break;
-            continue;
-        }
-
-        missesInRow = 0;
-
-        const priority =
-            isFirstSection && found.length < PRIORITY_FIRST_SECTION_COUNT;
-
-        found.push({
-            title: `${section.titlePrefix} #${idx}`,
-            type: section.defaultType,
-            imgUrl: url,
-            priority,
-        });
-    }
-
-    root.innerHTML = found.map(itemHtml).join("");
+async function loadGalleryJson() {
+    const res = await fetch(GALLERY_URL, { cache: "no-cache" });
+    if (!res.ok) throw new Error(`Failed to load gallery.json: ${res.status}`);
+    return res.json();
 }
 
-// Fallback if image fails later
+function normalizeArray(x) {
+    if (!x) return [];
+    if (Array.isArray(x)) return x;
+    return [];
+}
+
+function buildSectionFromList({ rootId, titlePrefix, defaultType }, files, isFirstSection) {
+    const root = document.getElementById(rootId);
+    if (!root) return;
+
+    const items = files.map((filename, i) => {
+        const n = i + 1;
+        const title = `${titlePrefix} #${n}`;
+        const priority = isFirstSection && i < PRIORITY_FIRST_SECTION_COUNT;
+
+        return itemHtml({
+            title,
+            type: defaultType,
+            thumbUrl: `${THUMB_DIR}${filename}`,
+            fullUrl: `${FULL_DIR}${filename}`,
+            priority,
+        });
+    });
+
+    root.innerHTML = items.join("");
+}
+
+// Fallback if thumb fails
 document.addEventListener(
     "error",
     (e) => {
@@ -157,23 +144,24 @@ const modalTitle = document.getElementById("modalTitle");
 const modalMeta = document.getElementById("modalMeta");
 const modalImg = document.getElementById("modalImg");
 
-function openModal({ title, type, img }) {
+function openModal({ title, type, fullUrl }) {
     if (!modal) return;
 
     modalTitle.textContent = title || "Artwork";
     modalMeta.textContent = type || "";
 
-    modalImg.src = img || "";
-    modalImg.alt = title || "Artwork";
+    // show modal first (fast), then load big image
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
 
+    modalImg.alt = title || "Artwork";
+    modalImg.src = ""; // reset
     modalImg.onerror = () => {
         modalImg.onerror = null;
         modalImg.src = makePlaceholderSvg(title || "Artwork");
     };
-
-    modal.classList.add("is-open");
-    modal.setAttribute("aria-hidden", "false");
-    document.body.style.overflow = "hidden";
+    modalImg.src = fullUrl;
 }
 
 function closeModal() {
@@ -193,11 +181,11 @@ document.addEventListener("click", (e) => {
     const btn = e.target.closest(".item");
     if (!btn) return;
 
-    openModal({
-        title: btn.dataset.title || "Artwork",
-        type: btn.dataset.type || "",
-        img: btn.dataset.img ? decodeURI(btn.dataset.img) : "",
-    });
+    const title = btn.dataset.title || "Artwork";
+    const type = btn.dataset.type || "";
+    const fullUrl = btn.dataset.full ? decodeURI(btn.dataset.full) : "";
+
+    openModal({ title, type, fullUrl });
 });
 
 if (modalBackdrop) modalBackdrop.addEventListener("click", closeModal);
@@ -206,7 +194,7 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeModal();
 });
 
-// ---------- Mobile menu ----------
+// ---------- Mobile menu (optional) ----------
 const burgerBtn = document.getElementById("burgerBtn");
 const mobileMenu = document.getElementById("mobileMenu");
 
@@ -226,14 +214,32 @@ if (burgerBtn && mobileMenu) {
     });
 }
 
-// ---------- Init (NFT first, then others) ----------
+// ---------- Init ----------
 (async function init() {
-    // Build first section (NFT) first with priority tiles
-    await buildSection(SECTIONS[0], true);
+    try {
+        const data = await loadGalleryJson();
 
-    // Then build the rest
-    for (let i = 1; i < SECTIONS.length; i++) {
-        // eslint-disable-next-line no-await-in-loop
-        await buildSection(SECTIONS[i], false);
+        const nft = normalizeArray(data.nft);
+        const mobile = normalizeArray(data.mobile);
+        const personal = normalizeArray(data.personal);
+
+        // Render in order; first section gets priority loading for first items
+        buildSectionFromList(SECTIONS[0], nft, true);
+        buildSectionFromList(SECTIONS[1], mobile, false);
+        buildSectionFromList(SECTIONS[2], personal, false);
+    } catch (err) {
+        console.error(err);
+
+        // Basic fallback UI: show nothing but avoid crashing
+        const grids = ["gridNft", "gridMobile", "gridPersonal"];
+        for (const id of grids) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.innerHTML =
+                    `<div style="color:rgba(255,255,255,.6);font-family:ui-monospace,Menlo,monospace;padding:12px 0;">
+            Failed to load gallery.json. Check file path and GitHub Pages base URL.
+          </div>`;
+            }
+        }
     }
 })();
