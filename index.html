@@ -3,75 +3,69 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Zhanna Zhyhanova — Portfolio</title>
 
-    <meta
-            name="description"
-            content="Portfolio of Zhanna Zhyhanova — 2D Artist: Environment, UI, Character."
-    />
+    <title>Zhanna — Portfolio</title>
+    <meta name="description" content="Portfolio of Zhanna — 2D Artist • Environment • UI • Character" />
 
-    <!-- Open Graph (Telegram / LinkedIn) -->
+    <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Zhanna Zhyhanova — Portfolio" />
-    <meta
-            property="og:description"
-            content="2D Artist: Environment, UI, Character."
-    />
-    <meta property="og:url" content="https://YOURNAME.github.io/YOUR-REPO/" />
-    <meta
-            property="og:image"
-            content="https://YOURNAME.github.io/YOUR-REPO/assets/og-cover.png"
-    />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
+    <meta property="og:title" content="Zhanna — Portfolio" />
+    <meta property="og:description" content="2D Artist • Environment • UI • Character" />
+    <!-- Зроби превʼю-картинку та поклади у корінь як og.jpg -->
+    <meta property="og:image" content="./og.jpg" />
+    <meta property="og:url" content="./" />
 
+    <!-- Twitter (optional) -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Zhanna Zhyhanova — Portfolio" />
-    <meta
-            name="twitter:description"
-            content="2D Artist: Environment, UI, Character."
-    />
-    <meta
-            name="twitter:image"
-            content="https://YOURNAME.github.io/YOUR-REPO/assets/og-cover.png"
-    />
+    <meta name="twitter:title" content="Zhanna — Portfolio" />
+    <meta name="twitter:description" content="2D Artist • Environment • UI • Character" />
+    <meta name="twitter:image" content="./og.jpg" />
 
     <link rel="stylesheet" href="./styles.css" />
 </head>
 
 <body>
-<div class="bg"></div>
+<!-- Global bg (без картинки, тільки мʼякий градієнт) -->
+<div class="bg" aria-hidden="true"></div>
 
+<!-- NAV -->
 <header class="nav">
-    <div class="nav__inner">
+    <div class="nav__inner container">
         <a class="brand" href="#top">Zhanna</a>
 
-        <nav class="nav__links" aria-label="Primary navigation">
+        <nav class="nav__links" aria-label="Primary">
             <a href="#work">Work</a>
             <a href="#personal">Personal</a>
             <a href="#contacts">Contacts</a>
         </nav>
 
-        <button class="nav__burger" id="burgerBtn" aria-label="Open menu" type="button">
+        <button class="burger" id="burgerBtn" type="button" aria-label="Open menu">
             <span></span><span></span><span></span>
         </button>
     </div>
 
-    <nav class="nav__mobile" id="mobileMenu" hidden aria-label="Mobile navigation">
+    <nav class="mobileMenu" id="mobileMenu" hidden aria-label="Mobile">
         <a href="#work">Work</a>
         <a href="#personal">Personal</a>
         <a href="#contacts">Contacts</a>
     </nav>
 </header>
 
-<!-- HERO -->
 <main id="top">
-    <section class="hero">
+    <!-- HERO (фон-картинка тільки тут) -->
+    <section class="hero" id="hero">
         <div class="hero__bg" aria-hidden="true"></div>
+
         <div class="container hero__content">
-            <div class="hero__text">
-                <div class="kicker">Portfolio of</div>
-                <h1 class="hero__title">Zhanna Zhyhanova</h1>
+            <div class="heroCard">
+                <div class="heroCard__kicker">PORTFOLIO OF</div>
+                <h1 class="heroCard__title">Zhanna Zhylhanova</h1>
+                <p class="heroCard__sub">2D Artist • Environment • UI • Character</p>
+
+                <div class="heroCard__actions">
+                    <a class="btn btn--primary" href="#work">View Works</a>
+                    <a class="btn btn--ghost" href="#contacts">Contacts</a>
+                </div>
             </div>
         </div>
     </section>
@@ -80,42 +74,26 @@
     <section class="section" id="work">
         <div class="container">
             <h2 class="section__title">NFT (Website)</h2>
-
-            <ul class="spaced-list">
+            <ul class="section__bullets">
                 <li>Backgrounds / environment art</li>
                 <li>NFT assets</li>
                 <li>Character design</li>
             </ul>
 
-            <div class="grid grid--work" id="gridNft"></div>
+            <div class="grid" id="gridNft"></div>
         </div>
-    </section>
 
-    <section class="section">
-        <div class="container">
-            <h2 class="section__title">Mobile Game</h2>
-
-            <ul class="spaced-list">
-                <li>UI icons (items + menu)</li>
-                <li>Story / cutscene illustrations</li>
-                <li>Backgrounds</li>
-            </ul>
-
-            <div class="grid grid--work" id="gridMobile"></div>
+        <div class="container section__spacer">
+            <h2 class="section__title">Mobile Works</h2>
+            <div class="grid" id="gridMobile"></div>
         </div>
     </section>
 
     <!-- PERSONAL -->
-    <section class="section section--bottom" id="personal">
+    <section class="section" id="personal">
         <div class="container">
             <h2 class="section__title">Personal Works</h2>
-
-            <ul class="spaced-list">
-                <li>Original illustrations</li>
-                <li>Fanart / character art</li>
-            </ul>
-
-            <div class="grid grid--personal" id="gridPersonal"></div>
+            <div class="grid" id="gridPersonal"></div>
         </div>
     </section>
 
@@ -123,14 +101,13 @@
     <section class="section section--bottom" id="contacts">
         <div class="container">
             <h2 class="section__title">Contacts</h2>
-            <p class="muted">Reach out with questions, ideas, or project inquiries.</p>
 
             <div class="contacts">
-                <a class="pill" href="mailto:zhanna.zhiganova@gmail.com">zhanna.zhiganova@gmail.com</a>
-                <a class="pill" href="tel:+380932050203">+380933463969</a>
+                <!-- заміни на свої -->
+                <a class="pill" href="mailto:example@email.com">example@email.com</a>
+                <a class="pill" href="https://www.linkedin.com/" target="_blank" rel="noreferrer">LinkedIn</a>
+                <a class="pill" href="https://t.me/" target="_blank" rel="noreferrer">Telegram</a>
             </div>
-
-
         </div>
     </section>
 </main>
@@ -138,20 +115,23 @@
 <!-- MODAL -->
 <div class="modal" id="modal" aria-hidden="true">
     <div class="modal__backdrop" id="modalBackdrop"></div>
+
     <div class="modal__panel" role="dialog" aria-modal="true" aria-label="Artwork preview">
         <div class="modal__top">
             <div>
                 <div class="modal__title" id="modalTitle">Artwork</div>
                 <div class="modal__meta" id="modalMeta"></div>
             </div>
+
             <button class="modal__close" id="modalClose" type="button" aria-label="Close">✕</button>
         </div>
+
         <div class="modal__body">
             <img id="modalImg" alt="" />
         </div>
     </div>
 </div>
 
-<script src="./app.js"></script>
+<script src="./app.js" defer></script>
 </body>
 </html>
